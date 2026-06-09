@@ -12,7 +12,7 @@
       "name": "GeanoFee"
     }
   ],
-  "scripts": [
+  "esmodules": [
     "scripts/main.js"
   ],
   "languages": [
