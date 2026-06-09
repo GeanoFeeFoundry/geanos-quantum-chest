@@ -6,6 +6,12 @@ function isPrimaryGM() {
     return game.user.isGM && game.users.activeGM?.isSelf;
 }
 
+// Foundry V12 stores the compendium source in _stats.compendiumSource.
+// V11 and earlier used flags.core.sourceId. We check both for compatibility.
+function getSourceId(actor) {
+    return actor._stats?.compendiumSource ?? actor.flags.core?.sourceId ?? null;
+}
+
 Hooks.once('init', async function() {
     console.log("Geano's Ender Chest | Initializing module");
 });
@@ -19,7 +25,7 @@ Hooks.once('ready', async function() {
     const enderChests = game.actors.filter(a => isEnderChest(a));
 
     for (const actor of enderChests) {
-        const sourceId = actor.flags.core?.sourceId;
+        const sourceId = getSourceId(actor);
         if (!sourceId || !sourceId.startsWith("Compendium.")) {
             console.warn(`Geano's Ender Chest | Actor ${actor.name} is flagged but has no valid compendium sourceId. Skipping sync.`);
             continue;
@@ -75,7 +81,7 @@ Hooks.once('ready', async function() {
 async function syncToCompendium(actor) {
     if (!isPrimaryGM() || !isEnderChest(actor)) return;
 
-    const sourceId = actor.flags.core?.sourceId;
+    const sourceId = getSourceId(actor);
     if (!sourceId || !sourceId.startsWith("Compendium.")) {
         console.warn(`Geano's Ender Chest | '${actor.name}' has no sourceId. Drag it out of a compendium to enable sync.`);
         return;
