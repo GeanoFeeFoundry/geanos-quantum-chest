@@ -45,35 +45,22 @@ Hooks.once('ready', async function() {
 
         const masterData = compendiumActor.toObject();
 
-        // Sync Items
-        if (typeof ItemPiles !== 'undefined') {
+        // Sync Items - manual replace is the most reliable path
+        const existingIds = actor.items.map(i => i.id);
+        if (existingIds.length > 0) {
+            await actor.deleteEmbeddedDocuments("Item", existingIds, { noHook: true });
+        }
+        if (masterData.items.length > 0) {
             const itemData = masterData.items.map(i => {
                 const data = foundry.utils.deepClone(i);
                 delete data._id;
                 return data;
             });
-            await ItemPiles.API.setActorItems(actor, itemData);
-        } else {
-            // Fallback: manual replace
-            const existingIds = actor.items.map(i => i.id);
-            if (existingIds.length > 0) {
-                await actor.deleteEmbeddedDocuments("Item", existingIds, { noHook: true });
-            }
-            if (masterData.items.length > 0) {
-                const itemData = masterData.items.map(i => {
-                    const data = foundry.utils.deepClone(i);
-                    delete data._id;
-                    return data;
-                });
-                await actor.createEmbeddedDocuments("Item", itemData, { keepId: true, noHook: true, renderSheet: false });
-            }
+            await actor.createEmbeddedDocuments("Item", itemData, { keepId: false, noHook: true, renderSheet: false });
         }
-        
-        // Sync System Data and Flags (Currency, stats, Item Piles config)
-        await actor.update({
-            system: masterData.system,
-            flags: masterData.flags
-        }, { noHook: true });
+
+        // Sync System Data (currency, stats) - preserve local flags
+        await actor.update({ system: masterData.system }, { noHook: true });
     }
 });
 
@@ -102,8 +89,10 @@ async function syncToCompendium(actor) {
         return;
     }
 
-    // Use .collection on the resolved document - the single reliable source of truth for the pack key
-    const packKey = compendiumActor.collection;
+    // Parse pack key from UUID string: "Compendium.packageId.packName.Actor.id" -> "packageId.packName"
+    // NOTE: .collection on a resolved V12 compendium document returns a Map, not a string.
+    const uuidParts = sourceId.split(".");
+    const packKey = uuidParts.slice(1, 3).join(".");
     console.log(`Geano's Ender Chest | Resolved compendium pack: '${packKey}'`);
 
     const pack = game.packs.get(packKey);
