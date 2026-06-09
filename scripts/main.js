@@ -35,10 +35,10 @@ Hooks.once('ready', async function() {
             // Fallback: manual replace
             const existingIds = actor.items.map(i => i.id);
             if (existingIds.length > 0) {
-                await actor.deleteEmbeddedDocuments("Item", existingIds);
+                await actor.deleteEmbeddedDocuments("Item", existingIds, { noHook: true });
             }
             if (itemData.length > 0) {
-                await actor.createEmbeddedDocuments("Item", itemData);
+                await actor.createEmbeddedDocuments("Item", itemData, { keepId: true, noHook: true, renderSheet: false });
             }
         }
     }
@@ -63,11 +63,11 @@ async function syncToCompendium(actor) {
     const index = await pack.getIndex();
     const existingIds = index.map(i => i._id);
     if (existingIds.length > 0) {
-        await Item.deleteDocuments(existingIds, { pack: pack.collection });
+        await Item.deleteDocuments(existingIds, { pack: pack.collection, noHook: true });
     }
 
     if (items.length > 0) {
-        await Item.createDocuments(items, { pack: pack.collection });
+        await Item.createDocuments(items, { pack: pack.collection, keepId: true, noHook: true, renderSheet: false });
     }
 
     if (wasLocked) await pack.configure({ locked: true });
@@ -98,10 +98,39 @@ Hooks.on('getActorSheetHeaderButtons', (sheet, buttons) => {
             await actor.setFlag('geanos-ender-chest', 'isEnderChest', newState);
             ui.notifications.info(`Ender Chest mode ${newState ? 'enabled' : 'disabled'} for ${actor.name}`);
             
+            // Toggle glow dynamically
+            if (sheet.element) {
+                if (newState) {
+                    sheet.element.addClass('geanos-ender-chest-sheet');
+                } else {
+                    sheet.element.removeClass('geanos-ender-chest-sheet');
+                }
+            }
+
             // Trigger an initial sync if it was just enabled
             if (newState) {
                 debouncedSync(actor);
             }
         }
     });
+});
+
+// Add visual indicator to Actor Directory
+Hooks.on('renderActorDirectory', (app, html, data) => {
+    const actors = game.actors.filter(a => isEnderChest(a));
+    for (const actor of actors) {
+        const li = html.find(`.directory-item[data-document-id="${actor.id}"] .document-name`);
+        if (li.length > 0) {
+            li.append(`<i class="fas fa-archive geanos-ender-chest-directory-icon" title="${game.i18n.localize('GEANOS_ENDER_CHEST.IndicatorTooltip')}"></i>`);
+        }
+    }
+});
+
+// Add glow to Actor Sheet
+Hooks.on('renderActorSheet', (app, html, data) => {
+    if (isEnderChest(app.actor)) {
+        html.closest('.app').addClass('geanos-ender-chest-sheet');
+    } else {
+        html.closest('.app').removeClass('geanos-ender-chest-sheet');
+    }
 });

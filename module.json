@@ -22,6 +22,9 @@
       "path": "languages/en.json"
     }
   ],
+  "styles": [
+    "css/geanos-ender-chest.css"
+  ],
   "packs": [
     {
       "name": "ender-chest-items",

@@ -2,6 +2,7 @@
   "GEANOS_ENDER_CHEST": {
     "ToggleEnderChest": "Toggle Ender Chest",
     "EnableEnderChest": "Enable Ender Chest",
-    "DisableEnderChest": "Disable Ender Chest"
+    "DisableEnderChest": "Disable Ender Chest",
+    "IndicatorTooltip": "This is an Ender Chest"
   }
 }
