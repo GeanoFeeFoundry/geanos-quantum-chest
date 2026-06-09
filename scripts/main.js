@@ -78,22 +78,30 @@ async function syncToCompendium(actor) {
     const sourceId = actor.flags.core?.sourceId;
     if (!sourceId || !sourceId.startsWith("Compendium.")) return;
 
+    // Parse the pack key directly from the UUID string - more reliable than .pack on the resolved document
+    // UUID format: Compendium.<packageId>.<packName>.Actor.<actorId>
+    const uuidParts = sourceId.split(".");
+    // Handles both "Compendium.package.pack.Actor.id" (5 parts) and legacy 4-part forms
+    const packKey = uuidParts.slice(1, 3).join(".");
+    const pack = game.packs.get(packKey);
+    if (!pack) {
+        console.warn(`Geano's Ender Chest | Could not find pack '${packKey}' for actor ${actor.name}. Is the compendium module active?`);
+        return;
+    }
+
     let compendiumActor;
     try {
         compendiumActor = await fromUuid(sourceId);
     } catch (e) {
+        console.error(`Geano's Ender Chest | Failed to resolve sourceId '${sourceId}':`, e);
         return;
     }
     if (!compendiumActor) return;
 
-    const pack = game.packs.get(compendiumActor.pack);
-    if (!pack) return;
-
     const localData = actor.toObject();
     
-    // We want to completely replace the Master Actor with localData's system, items, flags.
+    // Preserve compendium-specific identity fields, sync everything else
     localData._id = compendiumActor.id;
-    // Don't overwrite compendium master specific data
     localData.name = compendiumActor.name;
     localData.prototypeToken = compendiumActor.prototypeToken;
     localData.ownership = compendiumActor.ownership;
@@ -103,19 +111,21 @@ async function syncToCompendium(actor) {
     const wasLocked = pack.locked;
     if (wasLocked) await pack.configure({ locked: false });
 
-    // Delete existing master actor and perfectly clone the local one back in
+    // Replace the compendium entry wholesale to avoid deep-merge artifacts
     await Actor.deleteDocuments([compendiumActor.id], { pack: pack.collection, noHook: true });
     await Actor.createDocuments([localData], { pack: pack.collection, keepId: true, noHook: true, renderSheet: false });
 
     if (wasLocked) await pack.configure({ locked: true });
+    console.log(`Geano's Ender Chest | Synced '${actor.name}' -> compendium '${packKey}'.`);
 }
 
 // Debounce the sync to avoid spamming the compendium on bulk operations
 const debouncedSync = foundry.utils.debounce(syncToCompendium, 1000);
 
-Hooks.on('createItem', (item, options) => { if (!options.noHook) debouncedSync(item.parent) });
-Hooks.on('updateItem', (item, changes, options) => { if (!options.noHook) debouncedSync(item.parent) });
-Hooks.on('deleteItem', (item, options) => { if (!options.noHook) debouncedSync(item.parent) });
+// Guard safely against missing options object (e.g. from Item Piles or other modules)
+Hooks.on('createItem', (item, _data, options) => { if (!options?.noHook && item.parent) debouncedSync(item.parent); });
+Hooks.on('updateItem', (item, _changes, options) => { if (!options?.noHook && item.parent) debouncedSync(item.parent); });
+Hooks.on('deleteItem', (item, options) => { if (!options?.noHook && item.parent) debouncedSync(item.parent); });
 
 // Actor Sheet UI Toggle (V1 and V2)
 function insertHeaderButton(app, buttons) {
