@@ -1,0 +1,37 @@
+{
+  "id": "geanos-ender-chest",
+  "title": "Geano's Ender Chest",
+  "description": "Synchronizes the inventory of specific 'Ender Chest' actors across multiple Foundry VTT worlds.",
+  "version": "1.0.0",
+  "compatibility": {
+    "minimum": "12",
+    "verified": "12"
+  },
+  "authors": [
+    {
+      "name": "GeanoFee"
+    }
+  ],
+  "scripts": [
+    "scripts/main.js"
+  ],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "languages/en.json"
+    }
+  ],
+  "packs": [
+    {
+      "name": "ender-chest-items",
+      "label": "Ender Chest Items",
+      "path": "packs/ender-chest-items",
+      "type": "Item",
+      "ownership": {
+        "PLAYER": "NONE",
+        "ASSISTANT": "OWNER"
+      }
+    }
+  ]
+}
