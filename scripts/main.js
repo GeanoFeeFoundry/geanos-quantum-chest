@@ -15,21 +15,37 @@ Hooks.once('ready', async function() {
 
     if (!isPrimaryGM()) return;
 
-    const pack = game.packs.get('geanos-ender-chest.ender-chest-items');
-    if (!pack) return;
-
-    const compendiumItems = await pack.getDocuments();
-    const itemData = compendiumItems.map(i => {
-        const data = i.toObject();
-        delete data._id; // Ensure clean IDs when creating on actors
-        return data;
-    });
-
     // Find all Ender Chest actors in the world
     const enderChests = game.actors.filter(a => isEnderChest(a));
 
     for (const actor of enderChests) {
+        const sourceId = actor.flags.core?.sourceId;
+        if (!sourceId || !sourceId.startsWith("Compendium.")) {
+            console.warn(`Geano's Ender Chest | Actor ${actor.name} is flagged but has no valid compendium sourceId. Skipping sync.`);
+            continue;
+        }
+
+        let compendiumActor;
+        try {
+            compendiumActor = await fromUuid(sourceId);
+        } catch (e) {
+            console.error(`Geano's Ender Chest | Failed to resolve sourceId ${sourceId} for ${actor.name}`);
+        }
+
+        if (!compendiumActor) {
+            console.warn(`Geano's Ender Chest | Compendium actor not found for ${actor.name}. Make sure the shared compendium module is active.`);
+            continue;
+        }
+
+        const masterData = compendiumActor.toObject();
+
+        // Sync Items
         if (typeof ItemPiles !== 'undefined') {
+            const itemData = masterData.items.map(i => {
+                const data = foundry.utils.deepClone(i);
+                delete data._id;
+                return data;
+            });
             await ItemPiles.API.setActorItems(actor, itemData);
         } else {
             // Fallback: manual replace
@@ -37,10 +53,21 @@ Hooks.once('ready', async function() {
             if (existingIds.length > 0) {
                 await actor.deleteEmbeddedDocuments("Item", existingIds, { noHook: true });
             }
-            if (itemData.length > 0) {
+            if (masterData.items.length > 0) {
+                const itemData = masterData.items.map(i => {
+                    const data = foundry.utils.deepClone(i);
+                    delete data._id;
+                    return data;
+                });
                 await actor.createEmbeddedDocuments("Item", itemData, { keepId: true, noHook: true, renderSheet: false });
             }
         }
+        
+        // Sync System Data and Flags (Currency, stats, Item Piles config)
+        await actor.update({
+            system: masterData.system,
+            flags: masterData.flags
+        }, { noHook: true });
     }
 });
 
@@ -48,27 +75,37 @@ Hooks.once('ready', async function() {
 async function syncToCompendium(actor) {
     if (!isPrimaryGM() || !isEnderChest(actor)) return;
     
-    const pack = game.packs.get('geanos-ender-chest.ender-chest-items');
+    const sourceId = actor.flags.core?.sourceId;
+    if (!sourceId || !sourceId.startsWith("Compendium.")) return;
+
+    let compendiumActor;
+    try {
+        compendiumActor = await fromUuid(sourceId);
+    } catch (e) {
+        return;
+    }
+    if (!compendiumActor) return;
+
+    const pack = game.packs.get(compendiumActor.pack);
     if (!pack) return;
 
-    const items = actor.items.map(i => {
-        const data = i.toObject();
-        delete data._id;
-        return data;
-    });
+    const localData = actor.toObject();
+    
+    // We want to completely replace the Master Actor with localData's system, items, flags.
+    localData._id = compendiumActor.id;
+    // Don't overwrite compendium master specific data
+    localData.name = compendiumActor.name;
+    localData.prototypeToken = compendiumActor.prototypeToken;
+    localData.ownership = compendiumActor.ownership;
+    localData.folder = compendiumActor.folder;
+    localData.sort = compendiumActor.sort;
     
     const wasLocked = pack.locked;
     if (wasLocked) await pack.configure({ locked: false });
 
-    const index = await pack.getIndex();
-    const existingIds = index.map(i => i._id);
-    if (existingIds.length > 0) {
-        await Item.deleteDocuments(existingIds, { pack: pack.collection, noHook: true });
-    }
-
-    if (items.length > 0) {
-        await Item.createDocuments(items, { pack: pack.collection, keepId: true, noHook: true, renderSheet: false });
-    }
+    // Delete existing master actor and perfectly clone the local one back in
+    await Actor.deleteDocuments([compendiumActor.id], { pack: pack.collection, noHook: true });
+    await Actor.createDocuments([localData], { pack: pack.collection, keepId: true, noHook: true, renderSheet: false });
 
     if (wasLocked) await pack.configure({ locked: true });
 }
@@ -76,20 +113,20 @@ async function syncToCompendium(actor) {
 // Debounce the sync to avoid spamming the compendium on bulk operations
 const debouncedSync = foundry.utils.debounce(syncToCompendium, 1000);
 
-Hooks.on('createItem', (item) => debouncedSync(item.parent));
-Hooks.on('updateItem', (item) => debouncedSync(item.parent));
-Hooks.on('deleteItem', (item) => debouncedSync(item.parent));
+Hooks.on('createItem', (item, options) => { if (!options.noHook) debouncedSync(item.parent) });
+Hooks.on('updateItem', (item, changes, options) => { if (!options.noHook) debouncedSync(item.parent) });
+Hooks.on('deleteItem', (item, options) => { if (!options.noHook) debouncedSync(item.parent) });
 
-// Actor Sheet UI Toggle
-Hooks.on('getActorSheetHeaderButtons', (sheet, buttons) => {
-    const actor = sheet.actor;
+// Actor Sheet UI Toggle (V1 and V2)
+function insertHeaderButton(app, buttons) {
+    const actor = app.actor || app.document;
+    if (!actor || actor.documentName !== "Actor") return;
     
     // Only GM should be able to toggle the Ender Chest flag
     if (!game.user.isGM) return;
 
     const isChest = isEnderChest(actor);
-
-    buttons.unshift({
+    const btn = {
         label: game.i18n.localize(isChest ? "GEANOS_ENDER_CHEST.DisableEnderChest" : "GEANOS_ENDER_CHEST.EnableEnderChest"),
         class: "geanos-ender-chest-toggle",
         icon: "fas fa-archive",
@@ -98,12 +135,12 @@ Hooks.on('getActorSheetHeaderButtons', (sheet, buttons) => {
             await actor.setFlag('geanos-ender-chest', 'isEnderChest', newState);
             ui.notifications.info(`Ender Chest mode ${newState ? 'enabled' : 'disabled'} for ${actor.name}`);
             
-            // Toggle glow dynamically
-            if (sheet.element) {
+            // Toggle glow dynamically (V1)
+            if (app.element) {
                 if (newState) {
-                    sheet.element.addClass('geanos-ender-chest-sheet');
+                    app.element.addClass('geanos-ender-chest-sheet');
                 } else {
-                    sheet.element.removeClass('geanos-ender-chest-sheet');
+                    app.element.removeClass('geanos-ender-chest-sheet');
                 }
             }
 
@@ -112,17 +149,39 @@ Hooks.on('getActorSheetHeaderButtons', (sheet, buttons) => {
                 debouncedSync(actor);
             }
         }
-    });
-});
+    };
+
+    // V2 Applications might not have unshift or expect different structure, but array methods should work.
+    buttons.unshift(btn);
+}
+
+Hooks.on('getActorSheetHeaderButtons', insertHeaderButton);
+Hooks.on('getApplicationHeaderButtons', insertHeaderButton);
 
 // Add visual indicator to Actor Directory
 Hooks.on('renderActorDirectory', (app, html, data) => {
     const actors = game.actors.filter(a => isEnderChest(a));
     for (const actor of actors) {
-        const li = html.find(`.directory-item[data-document-id="${actor.id}"] .document-name`);
+        const li = html.find(`[data-document-id="${actor.id}"]`);
         if (li.length > 0) {
-            li.append(`<i class="fas fa-archive geanos-ender-chest-directory-icon" title="${game.i18n.localize('GEANOS_ENDER_CHEST.IndicatorTooltip')}"></i>`);
+            const nameEl = li.find('.document-name');
+            const iconHTML = `<i class="fas fa-archive geanos-ender-chest-directory-icon" title="${game.i18n.localize('GEANOS_ENDER_CHEST.IndicatorTooltip')}" style="margin-left: 5px; color: #a020f0;"></i>`;
+            if (nameEl.length > 0) {
+                nameEl.append(iconHTML);
+            } else {
+                li.append(iconHTML);
+            }
         }
+    }
+});
+
+// Force Sidebar re-render when flag changes
+Hooks.on('updateActor', (actor, changes, options) => {
+    if (foundry.utils.hasProperty(changes, "flags.geanos-ender-chest.isEnderChest")) {
+        ui.actors.render();
+    }
+    if (isEnderChest(actor) && !options.noHook) {
+        debouncedSync(actor);
     }
 });
 

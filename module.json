@@ -24,17 +24,5 @@
   ],
   "styles": [
     "css/geanos-ender-chest.css"
-  ],
-  "packs": [
-    {
-      "name": "ender-chest-items",
-      "label": "Ender Chest Items",
-      "path": "packs/ender-chest-items",
-      "type": "Item",
-      "ownership": {
-        "PLAYER": "NONE",
-        "ASSISTANT": "OWNER"
-      }
-    }
   ]
 }
