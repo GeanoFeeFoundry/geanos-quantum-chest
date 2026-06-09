@@ -74,32 +74,40 @@ Hooks.once('ready', async function() {
 // Outbound Sync: World -> Compendium
 async function syncToCompendium(actor) {
     if (!isPrimaryGM() || !isEnderChest(actor)) return;
-    
-    const sourceId = actor.flags.core?.sourceId;
-    if (!sourceId || !sourceId.startsWith("Compendium.")) return;
 
-    // Parse the pack key directly from the UUID string - more reliable than .pack on the resolved document
-    // UUID format: Compendium.<packageId>.<packName>.Actor.<actorId>
-    const uuidParts = sourceId.split(".");
-    // Handles both "Compendium.package.pack.Actor.id" (5 parts) and legacy 4-part forms
-    const packKey = uuidParts.slice(1, 3).join(".");
-    const pack = game.packs.get(packKey);
-    if (!pack) {
-        console.warn(`Geano's Ender Chest | Could not find pack '${packKey}' for actor ${actor.name}. Is the compendium module active?`);
+    const sourceId = actor.flags.core?.sourceId;
+    if (!sourceId || !sourceId.startsWith("Compendium.")) {
+        console.warn(`Geano's Ender Chest | '${actor.name}' has no sourceId. Drag it out of a compendium to enable sync.`);
         return;
     }
+
+    console.log(`Geano's Ender Chest | Syncing '${actor.name}' (sourceId: ${sourceId})...`);
 
     let compendiumActor;
     try {
         compendiumActor = await fromUuid(sourceId);
     } catch (e) {
-        console.error(`Geano's Ender Chest | Failed to resolve sourceId '${sourceId}':`, e);
+        console.error(`Geano's Ender Chest | fromUuid failed for '${sourceId}':`, e);
         return;
     }
-    if (!compendiumActor) return;
+
+    if (!compendiumActor) {
+        console.warn(`Geano's Ender Chest | fromUuid returned null for '${sourceId}'. Is the source compendium module active?`);
+        return;
+    }
+
+    // Use .collection on the resolved document - the single reliable source of truth for the pack key
+    const packKey = compendiumActor.collection;
+    console.log(`Geano's Ender Chest | Resolved compendium pack: '${packKey}'`);
+
+    const pack = game.packs.get(packKey);
+    if (!pack) {
+        console.error(`Geano's Ender Chest | game.packs.get('${packKey}') returned null. Available packs: ${[...game.packs.keys()].join(", ")}`);
+        return;
+    }
 
     const localData = actor.toObject();
-    
+
     // Preserve compendium-specific identity fields, sync everything else
     localData._id = compendiumActor.id;
     localData.name = compendiumActor.name;
@@ -107,7 +115,7 @@ async function syncToCompendium(actor) {
     localData.ownership = compendiumActor.ownership;
     localData.folder = compendiumActor.folder;
     localData.sort = compendiumActor.sort;
-    
+
     const wasLocked = pack.locked;
     if (wasLocked) await pack.configure({ locked: false });
 
@@ -116,8 +124,9 @@ async function syncToCompendium(actor) {
     await Actor.createDocuments([localData], { pack: pack.collection, keepId: true, noHook: true, renderSheet: false });
 
     if (wasLocked) await pack.configure({ locked: true });
-    console.log(`Geano's Ender Chest | Synced '${actor.name}' -> compendium '${packKey}'.`);
+    console.log(`Geano's Ender Chest | Sync complete: '${actor.name}' -> '${packKey}'.`);
 }
+
 
 // Debounce the sync to avoid spamming the compendium on bulk operations
 const debouncedSync = foundry.utils.debounce(syncToCompendium, 1000);
