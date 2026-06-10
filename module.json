@@ -1,7 +1,7 @@
 {
   "id": "geanos-ender-chest",
   "title": "Geano's Ender Chest",
-  "description": "Synchronizes the inventory of specific 'Ender Chest' actors across multiple Foundry VTT worlds.",
+  "description": "Synchronizes the inventory of specific 'Ender Chest' actors and journals across multiple Foundry VTT worlds.",
   "version": "1.0.0",
   "url": "https://github.com/GeanoFeeFoundry/geanos-ender-chest",
   "manifest": "https://github.com/GeanoFeeFoundry/geanos-ender-chest/releases/download/1.0.0/module.json",
