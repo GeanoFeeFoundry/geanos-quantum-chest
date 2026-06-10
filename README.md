@@ -1,6 +1,6 @@
 # Geano's Ender Chest
 
-**Geano's Ender Chest** is a Foundry VTT module that seamlessly synchronizes the inventory of specific actors across multiple worlds. By utilizing a shared compendium as a persistent "Ender Chest", you can easily share items, equipment, and loot between different campaigns or Worlds on the same server.
+**Geano's Ender Chest** is a Foundry VTT module that seamlessly synchronizes the inventory of specific actors across multiple worlds. By utilizing a shared compendium as a persistent "Ender Chest", you can easily share items, equipment, and loot between different campaigns or worlds on the same server.
 
 ## ✨ Features
 
