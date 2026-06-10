@@ -12,12 +12,9 @@ function getSourceId(actor) {
     return actor._stats?.compendiumSource ?? actor.flags.core?.sourceId ?? null;
 }
 
-Hooks.once('init', async function() {
-    console.log("Geano's Ender Chest | Initializing module");
-});
+Hooks.once('init', function() {});
 
 Hooks.once('ready', async function() {
-    console.log("Geano's Ender Chest | Ready");
 
     if (!isPrimaryGM()) return;
 
@@ -69,12 +66,8 @@ async function syncToCompendium(actor) {
     if (!isPrimaryGM() || !isEnderChest(actor)) return;
 
     const sourceId = getSourceId(actor);
-    if (!sourceId || !sourceId.startsWith("Compendium.")) {
-        console.warn(`Geano's Ender Chest | '${actor.name}' has no sourceId. Drag it out of a compendium to enable sync.`);
-        return;
-    }
+    if (!sourceId || !sourceId.startsWith("Compendium.")) return;
 
-    console.log(`Geano's Ender Chest | Syncing '${actor.name}' (sourceId: ${sourceId})...`);
 
     let compendiumActor;
     try {
@@ -93,13 +86,9 @@ async function syncToCompendium(actor) {
     // NOTE: .collection on a resolved V12 compendium document returns a Map, not a string.
     const uuidParts = sourceId.split(".");
     const packKey = uuidParts.slice(1, 3).join(".");
-    console.log(`Geano's Ender Chest | Resolved compendium pack: '${packKey}'`);
 
     const pack = game.packs.get(packKey);
-    if (!pack) {
-        console.error(`Geano's Ender Chest | game.packs.get('${packKey}') returned null. Available packs: ${[...game.packs.keys()].join(", ")}`);
-        return;
-    }
+    if (!pack) return;
 
     const localData = actor.toObject();
 
@@ -119,7 +108,6 @@ async function syncToCompendium(actor) {
     await Actor.createDocuments([localData], { pack: pack.collection, keepId: true, noHook: true, renderSheet: false });
 
     if (wasLocked) await pack.configure({ locked: true });
-    console.log(`Geano's Ender Chest | Sync complete: '${actor.name}' -> '${packKey}'.`);
 }
 
 
