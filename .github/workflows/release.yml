@@ -1,0 +1,98 @@
+name: Automated Release Packer
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'module.json'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetches history for correct changelog generation and tag checks
+
+      - name: Get Version from module.json
+        id: get_version
+        run: |
+          if [ ! -f "module.json" ]; then
+            echo "❌ FEHLER: Keine module.json im Ziel-Repository gefunden!"
+            exit 1
+          fi
+          VERSION=$(jq -r '.version' module.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Gefundene Version im Modul: $VERSION"
+
+      - name: Check if Tag exists
+        id: check_tag
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          if git show-ref --tags --verify --quiet "refs/tags/$VERSION"; then
+            echo "⚠️ Tag '$VERSION' existiert bereits. Überspringe Release."
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "✅ Version ist komplett neu. Release wird vorbereitet."
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Zip Module Git Files
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          zip -r module.zip . -x ".git/*" ".github/*"
+
+      - name: Generate Changelog
+        if: steps.check_tag.outputs.exists == 'false'
+        id: changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"%s")
+          else
+            COMMITS=$(git log ${PREV_TAG}..HEAD --pretty=format:"%s")
+          fi
+          
+          echo "## Changelog" > release_notes.md
+          echo "" >> release_notes.md
+          
+          COMMITS=$(echo "$COMMITS" | grep -ivE "^(chore:\s*release|ci:\s*update release workflow|.*\[skip\])")
+          
+          add_commits=$(echo "$COMMITS" | grep -iE "^(feat|add)\b" || true)
+          fix_commits=$(echo "$COMMITS" | grep -iE "^(fix|bug)\b" || true)
+          other_commits=$(echo "$COMMITS" | grep -ivE "^(feat|add|fix|bug)\b" || true)
+          
+          if [ -n "$add_commits" ]; then
+            echo "### ✨ New Features & Additions" >> release_notes.md
+            echo "$add_commits" | sed -E 's/^(feat|add)[^:]*:\s*/- [add] /i' >> release_notes.md
+            echo "" >> release_notes.md
+          fi
+          
+          if [ -n "$fix_commits" ]; then
+            echo "### 🐛 Bug Fixes" >> release_notes.md
+            echo "$fix_commits" | sed -E 's/^(fix|bug)[^:]*:\s*/- [fix] /i' >> release_notes.md
+            echo "" >> release_notes.md
+          fi
+          
+          if [ -n "$other_commits" ]; then
+            echo "### 🛠️ Maintenance & Other Changes" >> release_notes.md
+            echo "$other_commits" | sed -E 's/^([a-zA-Z]+)[^:]*:\s*/- [\1] /i' | sed -E '/^- \[[a-zA-Z]+\]/! s/^/- /' >> release_notes.md
+            echo "" >> release_notes.md
+          fi
+
+      - name: Create GitHub Release
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          name: ${{ steps.get_version.outputs.version }}
+          body_path: release_notes.md
+          files: |
+            module.json
+            module.zip
