@@ -1,8 +1,8 @@
 {
-  "GEANOS_ENDER_CHEST": {
-    "ToggleEnderChest": "Toggle Ender Chest",
-    "EnableEnderChest": "Enable Ender Chest",
-    "DisableEnderChest": "Disable Ender Chest",
-    "IndicatorTooltip": "This is an Ender Chest"
+  "GEANOS_QUANTUM_CHEST": {
+    "ToggleQuantumChest": "Toggle Quantum Chest",
+    "EnableQuantumChest": "Enable Quantum Chest",
+    "DisableQuantumChest": "Disable Quantum Chest",
+    "IndicatorTooltip": "This is a Quantum Chest"
   }
 }

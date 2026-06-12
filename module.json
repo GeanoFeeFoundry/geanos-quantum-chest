@@ -1,11 +1,11 @@
 {
-  "id": "geanos-ender-chest",
-  "title": "Geano's Ender Chest",
-  "description": "Synchronizes the inventory of specific 'Ender Chest' actors and journals across multiple Foundry VTT worlds.",
+  "id": "geanos-quantum-chest",
+  "title": "Geano's Quantum Chest",
+  "description": "Synchronizes the inventory of specific 'Quantum Chest' actors and journals across multiple Foundry VTT worlds.",
   "version": "1.0.0",
-  "url": "https://github.com/GeanoFeeFoundry/geanos-ender-chest",
-  "manifest": "https://github.com/GeanoFeeFoundry/geanos-ender-chest/releases/download/1.0.0/module.json",
-  "download": "https://github.com/GeanoFeeFoundry/geanos-ender-chest/releases/download/1.0.0/module.zip",
+  "url": "https://github.com/GeanoFeeFoundry/geanos-quantum-chest",
+  "manifest": "https://github.com/GeanoFeeFoundry/geanos-quantum-chest/releases/download/1.0.0/module.json",
+  "download": "https://github.com/GeanoFeeFoundry/geanos-quantum-chest/releases/download/1.0.0/module.zip",
   "compatibility": {
     "minimum": "12",
     "verified": "12"
@@ -26,6 +26,6 @@
     }
   ],
   "styles": [
-    "css/geanos-ender-chest.css"
+    "css/geanos-quantum-chest.css"
   ]
 }

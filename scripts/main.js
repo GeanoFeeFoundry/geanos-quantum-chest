@@ -1,5 +1,10 @@
-function isEnderChest(doc) {
-    return doc?.getFlag('geanos-ender-chest', 'isEnderChest');
+const OLD_MODULE_ID = 'geanos-ender-chest';
+const OLD_FLAG_KEY = 'isEnderChest';
+const MODULE_ID = 'geanos-quantum-chest';
+const FLAG_KEY = 'isQuantumChest';
+
+function isQuantumChest(doc) {
+    return doc?.getFlag(MODULE_ID, FLAG_KEY);
 }
 
 function isPrimaryGM() {
@@ -12,14 +17,66 @@ function getSourceId(doc) {
     return doc._stats?.compendiumSource ?? doc.flags.core?.sourceId ?? null;
 }
 
-Hooks.once('init', function() {});
+// Migration from the old "geanos-ender-chest" flag namespace to the new
+// "geanos-quantum-chest" namespace. Runs automatically once per world on
+// first load. Can be re-triggered manually from the browser console via:
+//   game.modules.get('geanos-quantum-chest').api.migrate()
+// Safe to remove in a future major version once all users have updated.
+async function migrateFlags({ force = false } = {}) {
+    const migrationKey = 'flagMigrationComplete';
+    if (!force && game.settings.get(MODULE_ID, migrationKey)) return;
+
+    if (force) {
+        await game.settings.set(MODULE_ID, migrationKey, false);
+        console.log(`Geano's Quantum Chest | Force-migration requested. Re-scanning all documents...`);
+    }
+
+    let migrated = 0;
+    for (const collection of [game.actors, game.journal]) {
+        for (const doc of collection) {
+            const oldFlag = doc.getFlag(OLD_MODULE_ID, OLD_FLAG_KEY);
+            if (oldFlag == null) continue;
+
+            await doc.setFlag(MODULE_ID, FLAG_KEY, oldFlag);
+            await doc.unsetFlag(OLD_MODULE_ID, OLD_FLAG_KEY);
+            migrated++;
+        }
+    }
+
+    await game.settings.set(MODULE_ID, migrationKey, true);
+    if (migrated > 0) {
+        ui.notifications.info(`Quantum Chest | Migrated ${migrated} document(s) from legacy flags.`);
+    } else if (force) {
+        ui.notifications.info(`Quantum Chest | No legacy flags found. Everything is clean.`);
+    }
+    console.log(`Geano's Quantum Chest | Migration complete. ${migrated} document(s) processed.`);
+}
+
+Hooks.once('init', function() {
+    game.settings.register(MODULE_ID, 'flagMigrationComplete', {
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false
+    });
+
+    // Public API for console access
+    const mod = game.modules.get(MODULE_ID);
+    if (mod) {
+        mod.api = {
+            migrate: () => migrateFlags({ force: true })
+        };
+    }
+});
 
 // Inbound Sync: Compendium -> World (on every world load)
 Hooks.once('ready', async function() {
     if (!isPrimaryGM()) return;
 
+    await migrateFlags();
+
     for (const collection of [game.actors, game.journal]) {
-        for (const doc of collection.filter(d => isEnderChest(d))) {
+        for (const doc of collection.filter(d => isQuantumChest(d))) {
             await syncFromCompendium(doc);
         }
     }
@@ -28,7 +85,7 @@ Hooks.once('ready', async function() {
 async function syncFromCompendium(doc) {
     const sourceId = getSourceId(doc);
     if (!sourceId || !sourceId.startsWith("Compendium.")) {
-        console.warn(`Geano's Ender Chest | '${doc.name}' is flagged but has no compendium sourceId. Skipping inbound sync.`);
+        console.warn(`Geano's Quantum Chest | '${doc.name}' is flagged but has no compendium sourceId. Skipping inbound sync.`);
         return;
     }
 
@@ -36,11 +93,11 @@ async function syncFromCompendium(doc) {
     try {
         compendiumDoc = await fromUuid(sourceId);
     } catch (e) {
-        console.error(`Geano's Ender Chest | Failed to resolve sourceId '${sourceId}' for '${doc.name}':`, e);
+        console.error(`Geano's Quantum Chest | Failed to resolve sourceId '${sourceId}' for '${doc.name}':`, e);
     }
 
     if (!compendiumDoc) {
-        console.warn(`Geano's Ender Chest | Compendium document not found for '${doc.name}'. Is the source compendium module active?`);
+        console.warn(`Geano's Quantum Chest | Compendium document not found for '${doc.name}'. Is the source compendium module active?`);
         return;
     }
 
@@ -80,7 +137,7 @@ async function syncFromCompendium(doc) {
 
 // Outbound Sync: World -> Compendium
 async function syncToCompendium(doc) {
-    if (!isPrimaryGM() || !isEnderChest(doc)) return;
+    if (!isPrimaryGM() || !isQuantumChest(doc)) return;
 
     const sourceId = getSourceId(doc);
     if (!sourceId || !sourceId.startsWith("Compendium.")) return;
@@ -89,7 +146,7 @@ async function syncToCompendium(doc) {
     try {
         compendiumDoc = await fromUuid(sourceId);
     } catch (e) {
-        console.error(`Geano's Ender Chest | Failed to resolve sourceId '${sourceId}':`, e);
+        console.error(`Geano's Quantum Chest | Failed to resolve sourceId '${sourceId}':`, e);
         return;
     }
     if (!compendiumDoc) return;
@@ -130,39 +187,39 @@ const debouncedSync = foundry.utils.debounce(syncToCompendium, 1000);
 
 // Actor hooks: embedded item changes bubble up to the parent actor
 Hooks.on('createItem', (item, _data, options) => {
-    if (options?.noHook || !item.parent || !isEnderChest(item.parent)) return;
+    if (options?.noHook || !item.parent || !isQuantumChest(item.parent)) return;
     debouncedSync(item.parent);
 });
 Hooks.on('updateItem', (item, _changes, options) => {
-    if (options?.noHook || !item.parent || !isEnderChest(item.parent)) return;
+    if (options?.noHook || !item.parent || !isQuantumChest(item.parent)) return;
     debouncedSync(item.parent);
 });
 Hooks.on('deleteItem', (item, options) => {
-    if (options?.noHook || !item.parent || !isEnderChest(item.parent)) return;
+    if (options?.noHook || !item.parent || !isQuantumChest(item.parent)) return;
     debouncedSync(item.parent);
 });
 Hooks.on('updateActor', (doc, changes, options) => {
-    if (foundry.utils.hasProperty(changes, "flags.geanos-ender-chest.isEnderChest")) {
+    if (foundry.utils.hasProperty(changes, `flags.${MODULE_ID}.${FLAG_KEY}`)) {
         ui.actors?.render();
     }
-    if (isEnderChest(doc) && !options?.noHook) debouncedSync(doc);
+    if (isQuantumChest(doc) && !options?.noHook) debouncedSync(doc);
 });
 
 // Journal hooks: page changes bubble up to the parent journal entry
 Hooks.on('createJournalEntryPage', (page, _data, options) => {
-    if (options?.noHook || !isEnderChest(page.parent)) return;
+    if (options?.noHook || !isQuantumChest(page.parent)) return;
     debouncedSync(page.parent);
 });
 Hooks.on('updateJournalEntryPage', (page, _changes, options) => {
-    if (options?.noHook || !isEnderChest(page.parent)) return;
+    if (options?.noHook || !isQuantumChest(page.parent)) return;
     debouncedSync(page.parent);
 });
 Hooks.on('deleteJournalEntryPage', (page, options) => {
-    if (options?.noHook || !isEnderChest(page.parent)) return;
+    if (options?.noHook || !isQuantumChest(page.parent)) return;
     debouncedSync(page.parent);
 });
 Hooks.on('updateJournalEntry', (doc, _changes, options) => {
-    if (isEnderChest(doc) && !options?.noHook) debouncedSync(doc);
+    if (isQuantumChest(doc) && !options?.noHook) debouncedSync(doc);
 });
 
 // Header button toggle - restricted to supported document types
@@ -171,16 +228,16 @@ function insertHeaderButton(app, buttons) {
     if (!doc?.getFlag || !game.user.isGM) return;
     if (doc.documentName !== "Actor" && doc.documentName !== "JournalEntry") return;
 
-    const isChest = isEnderChest(doc);
+    const isChest = isQuantumChest(doc);
     buttons.unshift({
-        label: game.i18n.localize(isChest ? "GEANOS_ENDER_CHEST.DisableEnderChest" : "GEANOS_ENDER_CHEST.EnableEnderChest"),
-        class: "geanos-ender-chest-toggle",
+        label: game.i18n.localize(isChest ? "GEANOS_QUANTUM_CHEST.DisableQuantumChest" : "GEANOS_QUANTUM_CHEST.EnableQuantumChest"),
+        class: "geanos-quantum-chest-toggle",
         icon: "fas fa-archive",
         onclick: async () => {
             const newState = !isChest;
-            await doc.setFlag('geanos-ender-chest', 'isEnderChest', newState);
-            ui.notifications.info(`Ender Chest mode ${newState ? 'enabled' : 'disabled'} for ${doc.name}`);
-            if (app.element) app.element.toggleClass('geanos-ender-chest-sheet', newState);
+            await doc.setFlag(MODULE_ID, FLAG_KEY, newState);
+            ui.notifications.info(`Quantum Chest mode ${newState ? 'enabled' : 'disabled'} for ${doc.name}`);
+            if (app.element) app.element.toggleClass('geanos-quantum-chest-sheet', newState);
             if (newState) debouncedSync(doc);
         }
     });
@@ -192,9 +249,9 @@ Hooks.on('getApplicationHeaderButtons',  insertHeaderButton);
 
 // Visual indicator in sidebar directories
 function addDirectoryIndicators(html, collection) {
-    const tooltip = game.i18n.localize('GEANOS_ENDER_CHEST.IndicatorTooltip');
-    const iconHTML = `<i class="fas fa-archive geanos-ender-chest-directory-icon" title="${tooltip}" style="margin-left: 5px; color: #a020f0;"></i>`;
-    for (const doc of collection.filter(d => isEnderChest(d))) {
+    const tooltip = game.i18n.localize('GEANOS_QUANTUM_CHEST.IndicatorTooltip');
+    const iconHTML = `<i class="fas fa-archive geanos-quantum-chest-directory-icon" title="${tooltip}" style="margin-left: 5px; color: #a020f0;"></i>`;
+    for (const doc of collection.filter(d => isQuantumChest(d))) {
         const li = html.find(`[data-document-id="${doc.id}"]`);
         if (li.length === 0) continue;
         const nameEl = li.find('.document-name');
@@ -206,5 +263,5 @@ Hooks.on('renderActorDirectory',   (app, html) => addDirectoryIndicators(html, g
 Hooks.on('renderJournalDirectory', (app, html) => addDirectoryIndicators(html, game.journal));
 
 // Glow on open sheets
-Hooks.on('renderActorSheet',   (app, html) => html.closest('.app').toggleClass('geanos-ender-chest-sheet', !!isEnderChest(app.actor)));
-Hooks.on('renderJournalSheet', (app, html) => html.closest('.app').toggleClass('geanos-ender-chest-sheet', !!isEnderChest(app.object)));
+Hooks.on('renderActorSheet',   (app, html) => html.closest('.app').toggleClass('geanos-quantum-chest-sheet', !!isQuantumChest(app.actor)));
+Hooks.on('renderJournalSheet', (app, html) => html.closest('.app').toggleClass('geanos-quantum-chest-sheet', !!isQuantumChest(app.object)));

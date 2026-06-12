@@ -1,14 +1,14 @@
-/* Geano's Ender Chest - Visual Indicators */
+/* Geano's Quantum Chest - Visual Indicators */
 
 /* Actor Sheet Glow */
-.geanos-ender-chest-sheet .window-header {
+.geanos-quantum-chest-sheet .window-header {
     box-shadow: 0 0 15px rgba(128, 0, 128, 0.8) !important;
     border: 1px solid rgba(128, 0, 128, 1) !important;
     background: rgba(80, 0, 80, 0.8) !important;
 }
 
 /* Actor Directory Icon */
-.geanos-ender-chest-directory-icon {
+.geanos-quantum-chest-directory-icon {
     color: #a020f0;
     margin-left: 5px;
     text-shadow: 0 0 5px rgba(160, 32, 240, 0.8);
